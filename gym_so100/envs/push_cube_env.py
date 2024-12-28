@@ -11,6 +11,66 @@ from gym_so100 import ASSETS_PATH
 BASE_LINK_NAME = "Rotation_Pitch"
 EE_LINK_NAME = "Fixed_Jaw"
 
+def get_joint_forces(data):
+    """
+    Get the total force on all joints in the MuJoCo simulation.
+    
+    Args:
+        data (mujoco.MjData): The MuJoCo simulation data object
+    
+    Returns:
+        dict: Dictionary containing different force measurements for each joint
+            - qfrc_actuator: Actuator forces
+            - qfrc_bias: Bias forces (Coriolis, centrifugal, gravitational)
+            - qfrc_constraint: Constraint forces
+            - qfrc_applied: Externally applied forces
+            - qfrc_passive: Spring, damping, friction forces
+    """
+    joint_names = [
+        "Rotation",
+        "Pitch",
+        "Elbow",
+        "Wrist_Pitch",
+        "Wrist_Roll",
+        "Jaw"
+    ]
+    
+    # Get the indices for each joint
+    joint_indices = []
+    for name in joint_names:
+        joint_id = data.joint(name).id
+        joint_indices.append(joint_id)
+    
+    forces = {
+        'qfrc_actuator': {},    # Actuator forces
+        'qfrc_bias': {},        # Bias forces (Coriolis, centrifugal, gravitational)
+        'qfrc_constraint': {},  # Constraint forces
+        'qfrc_applied': {},     # Externally applied forces
+        'qfrc_passive': {},     # Spring, damping, friction forces
+    }
+    
+    # Collect forces for each joint
+    for name, idx in zip(joint_names, joint_indices):
+        forces['qfrc_actuator'][name] = data.qfrc_actuator[idx]
+        forces['qfrc_bias'][name] = data.qfrc_bias[idx]
+        forces['qfrc_constraint'][name] = data.qfrc_constraint[idx]
+        forces['qfrc_applied'][name] = data.qfrc_applied[idx]
+        forces['qfrc_passive'][name] = data.qfrc_passive[idx]
+    
+    # Calculate total force for each joint
+    total_forces = {}
+    for name in joint_names:
+        total_forces[name] = (
+            forces['qfrc_actuator'][name] +
+            forces['qfrc_bias'][name] +
+            forces['qfrc_constraint'][name] +
+            forces['qfrc_applied'][name] +
+            forces['qfrc_passive'][name]
+        )
+    
+    forces['total'] = total_forces
+    
+    return forces
 
 class PushCubeEnv(Env):
     """
@@ -118,10 +178,10 @@ class PushCubeEnv(Env):
 
         # Set additional utils
         self.threshold_height = 0.5
-        self.cube_low = np.array([-0.15, -0.45, 0.015])
-        self.cube_high = np.array([0.15, -0.35, 0.015])
-        self.target_low = np.array([-0.15, -0.45, 0.005])
-        self.target_high = np.array([0.15, -0.35, 0.005])
+        self.cube_low = np.array([-0.15, -0.35, 0.015])
+        self.cube_high = np.array([0.15, -0.25, 0.015])
+        self.target_low = np.array([-0.15, -0.35, 0.005])
+        self.target_high = np.array([0.15, -0.25, 0.005])
 
         # get dof addresses
         self.cube_dof_id = self.model.body("cube").dofadr[0]
@@ -208,9 +268,14 @@ class PushCubeEnv(Env):
         cube_to_ee = np.linalg.norm(cube_pos - ee_pos)
         ee_to_target = np.linalg.norm(ee_pos - self.target_pos)
 
+        forces = get_joint_forces(self.data)
+        mag_total_force = sum([abs(v) for v in forces["total"].values()])
+
         # Compute the reward
-        reward = -cube_to_target
+        # Higher values (more positive) are better
+        reward = -cube_to_target - 0.1*cube_to_ee - 0.0001*mag_total_force
         return observation, reward, False, False, {}
+
 
     def render(self):
         if self.render_mode == "human":
