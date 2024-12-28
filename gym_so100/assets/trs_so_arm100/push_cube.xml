@@ -27,10 +27,9 @@
           <inertial pos="0 0 0" mass="0.1" diaginertia="0.00016667 0.00016667 0.00016667"/>
           <geom friction="0.5" condim="4" pos="0 0 0" size="0.015 0.015 0.015" type="box" name="red_box" rgba="0.5 0 0 1" priority="1"/>
       </body>
-
-		<camera name="camera_front" pos="0.049 0.5 0.225" xyaxes="-0.998 0.056 -0.000 -0.019 -0.335 0.942"/>
-		<camera name="camera_top" pos="0 0.1 0.6" euler="0 0 0" mode="fixed"/>
-	  <camera name="camera_vizu" pos="-0.1 0.6 0.3" quat="-0.15 -0.1 0.6 1"/>
+          <camera name="camera_front" pos="0.049 0.5 0.225" xyaxes="-0.998 0.056 -0.000 -0.019 -0.335 0.942"/>
+          <camera name="camera_top" pos="0 0.1 0.6" euler="0 0 0" mode="fixed"/>
+          <camera name="camera_vizu" pos="-1.308 -1.357 1.145" xyaxes="0.720 -0.694 0.000 0.360 0.374 0.855"/>
 
     <geom name="target_region" type="cylinder" pos=".06 .135 0.005" size="0.035 0.01" rgba="0 0 1 0.3"  contype="0" conaffinity="0" />
 	  
