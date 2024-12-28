@@ -273,7 +273,7 @@ class PushCubeEnv(Env):
 
         # Compute the reward
         # Higher values (more positive) are better
-        reward = -cube_to_target - 0.1*cube_to_ee - 0.0001*mag_total_force
+        reward = -cube_to_target - 0.1*cube_to_ee - 0.0005*mag_total_force
         return observation, reward, False, False, {}
 
 

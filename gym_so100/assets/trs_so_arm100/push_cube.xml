@@ -29,7 +29,7 @@
       </body>
           <camera name="camera_front" pos="0.049 0.5 0.225" xyaxes="-0.998 0.056 -0.000 -0.019 -0.335 0.942"/>
           <camera name="camera_top" pos="0 0.1 0.6" euler="0 0 0" mode="fixed"/>
-          <camera name="camera_vizu" pos="-1.308 -1.357 1.145" xyaxes="0.720 -0.694 0.000 0.360 0.374 0.855"/>
+          <camera name="camera_vizu" pos="-0.448 -0.796 0.488" xyaxes="0.739 -0.673 -0.000 0.338 0.371 0.865"/>
 
     <geom name="target_region" type="cylinder" pos=".06 .135 0.005" size="0.035 0.01" rgba="0 0 1 0.3"  contype="0" conaffinity="0" />
 	  
