@@ -121,7 +121,7 @@ class PushCubeEnv(Env):
         self.cube_low = np.array([-0.15, -0.45, 0.015])
         self.cube_high = np.array([0.15, -0.35, 0.015])
         self.target_low = np.array([-0.15, -0.45, 0.005])
-        self.target_high = np.array([0.15, -0.35, 0.2])
+        self.target_high = np.array([0.15, -0.35, 0.005])
 
         # get dof addresses
         self.cube_dof_id = self.model.body("cube").dofadr[0]
@@ -209,8 +209,7 @@ class PushCubeEnv(Env):
         ee_to_target = np.linalg.norm(ee_pos - self.target_pos)
 
         # Compute the reward
-        # reward = -(cube_to_target + cube_to_ee)
-        reward = -(ee_to_target)
+        reward = -cube_to_target
         return observation, reward, False, False, {}
 
     def render(self):
