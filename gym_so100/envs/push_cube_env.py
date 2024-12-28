@@ -6,7 +6,10 @@ import mujoco.viewer
 import numpy as np
 from gymnasium import Env, spaces
 
-from gym_lowcostrobot import ASSETS_PATH, BASE_LINK_NAME
+from gym_so100 import ASSETS_PATH
+
+BASE_LINK_NAME = "Rotation_Pitch"
+EE_LINK_NAME = "Fixed_Jaw"
 
 
 class PushCubeEnv(Env):
@@ -43,23 +46,23 @@ class PushCubeEnv(Env):
 
     The observation space is a dictionary containing the following subspaces:
 
-    - `"arm_qpos"`: the joint angles of the robot arm in radians, shape (6,)
-    - `"arm_qvel"`: the joint velocities of the robot arm in radians per second, shape (6,)
+    - `"agent_pos"`: the joint angles of the robot arm in radians, shape (6,)
+    - `"agent_vel"`: the joint velocities of the robot arm in radians per second, shape (6,)
     - `"target_pos"`: the position of the target, as (x, y, z)
     - `"image_front"`: the front image of the camera of size (240, 320, 3)
     - `"image_top"`: the top image of the camera of size (240, 320, 3)
-    - `"cube_pos"`: the position of the cube, as (x, y, z)
+    - `"environment_state"`: the position of the cube, as (x, y, z)
 
     Three observation modes are available: "image" (default), "state", and "both".
 
     | Key             | `"image"` | `"state"` | `"both"` |
     | --------------- | --------- | --------- | -------- |
-    | `"arm_qpos"`    | ✓         | ✓         | ✓        |
-    | `"arm_qvel"`    | ✓         | ✓         | ✓        |
+    | `"agent_pos"`    | ✓         | ✓         | ✓        |
+    | `"agent_vel"`    | ✓         | ✓         | ✓        |
     | `"target_pos"`  | ✓         | ✓         | ✓        |
     | `"image_front"` | ✓         |           | ✓        |
     | `"image_top"`   | ✓         |           | ✓        |
-    | `"cube_pos"`    |           | ✓         | ✓        |
+    | `"environment_state"`    |           | ✓         | ✓        |
 
     ## Reward
 
@@ -83,15 +86,15 @@ class PushCubeEnv(Env):
         # Set the action space
         self.action_mode = action_mode
         action_shape = {"joint": 6, "ee": 4}[action_mode]
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(action_shape,), dtype=np.float32)
+        self.action_space = spaces.Box(low=-3, high=3, shape=(action_shape,), dtype=np.float32)
  
         self.nb_dof = 6
 
         # Set the observations space
         self.observation_mode = observation_mode
         observation_subspaces = {
-            "arm_qpos": spaces.Box(low=-np.pi, high=np.pi, shape=(6,)),
-            "arm_qvel": spaces.Box(low=-10.0, high=10.0, shape=(6,)),
+            "agent_pos": spaces.Box(low=-np.pi, high=np.pi, shape=(6,)),
+            "agent_vel": spaces.Box(low=-10.0, high=10.0, shape=(6,)),
             "target_pos": spaces.Box(low=-10.0, high=10.0, shape=(3,)),
         }
         if self.observation_mode in ["image", "both"]:
@@ -99,7 +102,8 @@ class PushCubeEnv(Env):
             observation_subspaces["image_top"] = spaces.Box(0, 255, shape=(240, 320, 3), dtype=np.uint8)
             self.renderer = mujoco.Renderer(self.model)
         if self.observation_mode in ["state", "both"]:
-            observation_subspaces["cube_pos"] = spaces.Box(low=-10.0, high=10.0, shape=(3,))
+            observation_subspaces["environment_state"] = spaces.Box(low=-10.0, high=10.0, shape=(3,))
+
         self.observation_space = gym.spaces.Dict(observation_subspaces)
 
         # Set the render utilities
@@ -114,10 +118,10 @@ class PushCubeEnv(Env):
 
         # Set additional utils
         self.threshold_height = 0.5
-        self.cube_low = np.array([-0.15, 0.10, 0.015])
-        self.cube_high = np.array([0.15, 0.25, 0.015])
-        self.target_low = np.array([-0.15, 0.10, 0.005])
-        self.target_high = np.array([0.15, 0.25, 0.005])
+        self.cube_low = np.array([-0.15, -0.45, 0.015])
+        self.cube_high = np.array([0.15, -0.35, 0.015])
+        self.target_low = np.array([-0.15, -0.45, 0.005])
+        self.target_high = np.array([0.15, -0.35, 0.2])
 
         # get dof addresses
         self.cube_dof_id = self.model.body("cube").dofadr[0]
@@ -129,55 +133,6 @@ class PushCubeEnv(Env):
 
         self.control_decimation = 4 # number of simulation steps per control step
 
-    def inverse_kinematics(self, ee_target_pos, step=0.2, joint_name="link_6", nb_dof=6, regularization=1e-6):
-        """
-        Computes the inverse kinematics for a robotic arm to reach the target end effector position.
-
-        :param ee_target_pos: numpy array of target end effector position [x, y, z]
-        :param step: float, step size for the iteration
-        :param joint_name: str, name of the end effector joint
-        :param nb_dof: int, number of degrees of freedom
-        :param regularization: float, regularization factor for the pseudoinverse computation
-        :return: numpy array of target joint positions
-        """
-        try:
-            # Get the joint ID from the name
-            joint_id = self.model.body(joint_name).id
-        except KeyError:
-            raise ValueError(f"Body name '{joint_name}' not found in the model.")
-
-        # Get the current end effector position
-        # ee_pos = self.d.geom_xpos[joint_id]
-        ee_id = self.model.body(joint_name).id
-        ee_pos = self.data.geom_xpos[ee_id]
-
-        # Compute the Jacobian
-        jac = np.zeros((3, self.model.nv))
-        mujoco.mj_jacBodyCom(self.model, self.data, jac, None, joint_id)
-
-        # Compute the difference between target and current end effector positions
-        delta_pos = ee_target_pos - ee_pos
-
-        # Compute the pseudoinverse of the Jacobian with regularization
-        jac_reg = jac[:, :nb_dof].T @ jac[:, :nb_dof] + regularization * np.eye(nb_dof)
-        jac_pinv = np.linalg.inv(jac_reg) @ jac[:, :nb_dof].T
-
-        # Compute target joint velocities
-        qdot = jac_pinv @ delta_pos
-
-        # Normalize joint velocities to avoid excessive movements
-        qdot_norm = np.linalg.norm(qdot)
-        if qdot_norm > 1.0:
-            qdot /= qdot_norm
-
-        # Read the current joint positions
-        qpos = self.data.qpos[self.arm_dof_id:self.arm_dof_id+nb_dof]
-
-        # Compute the new joint positions
-        q_target_pos = qpos + qdot * step
-
-        return q_target_pos
-
     def apply_action(self, action):
         """
         Step the simulation forward based on the action
@@ -186,23 +141,9 @@ class PushCubeEnv(Env):
         - EE mode: [dx, dy, dz, gripper]
         - Joint mode: [q1, q2, q3, q4, q5, q6, gripper]
         """
-        if self.action_mode == "ee":
-            # raise NotImplementedError("EE mode not implemented yet")
-            ee_action, gripper_action = action[:3], action[-1]
-
-            # Update the robot position based on the action
-            ee_id = self.model.body("link_6").id
-            ee_target_pos = self.data.xpos[ee_id] + ee_action
-
-            # Use inverse kinematics to get the joint action wrt the end effector current position and displacement
-            target_qpos = self.inverse_kinematics(ee_target_pos=ee_target_pos)
-            target_qpos[-1:] = gripper_action
-        elif self.action_mode == "joint":
-            target_low = np.array([-3.14159, -1.5708, -1.48353, -1.91986, -2.96706, -1.74533])
-            target_high = np.array([3.14159, 1.22173, 1.74533, 1.91986, 2.96706, 0.0523599])
-            target_qpos = np.array(action).clip(target_low, target_high)
-        else:
-            raise ValueError("Invalid action mode, must be 'ee' or 'joint'")
+        target_low = np.array([-2.2, -3.14158, 0, -2.0, -3.14158, -0.2])
+        target_high = np.array([2.2, 0.2, 3.14158, 1.8, 3.14158, 2.0])
+        target_qpos = np.deg2rad(np.array(action))#.clip(target_low, target_high)
 
         # Set the target position
         self.data.ctrl = target_qpos
@@ -215,11 +156,11 @@ class PushCubeEnv(Env):
 
 
     def get_observation(self):
-        # qpos is [x, y, z, qw, qx, qy, qz, q1, q2, q3, q4, q5, q6, gripper]
-        # qvel is [vx, vy, vz, wx, wy, wz, dq1, dq2, dq3, dq4, dq5, dq6, dgripper]
+        # pos is [x, y, z, qw, qx, qy, qz, q1, q2, q3, q4, q5, q6, gripper]
+        # vel is [vx, vy, vz, wx, wy, wz, dq1, dq2, dq3, dq4, dq5, dq6, dgripper]
         observation = {
-            "arm_qpos": self.data.qpos[self.arm_dof_id:self.arm_dof_id+self.nb_dof].astype(np.float32),
-            "arm_qvel": self.data.qvel[self.arm_dof_vel_id:self.arm_dof_vel_id+self.nb_dof].astype(np.float32),
+            "agent_pos": self.data.qpos[self.arm_dof_id:self.arm_dof_id+self.nb_dof].astype(np.float32),
+            "agent_vel": self.data.qvel[self.arm_dof_vel_id:self.arm_dof_vel_id+self.nb_dof].astype(np.float32),
             "target_pos": self.target_pos,
         }
         if self.observation_mode in ["image", "both"]:
@@ -228,7 +169,7 @@ class PushCubeEnv(Env):
             self.renderer.update_scene(self.data, camera="camera_top")
             observation["image_top"] = self.renderer.render()
         if self.observation_mode in ["state", "both"]:
-            observation["cube_pos"] = self.data.qpos[self.cube_dof_id:self.cube_dof_id+3].astype(np.float32)
+            observation["environment_state"] = self.data.qpos[self.cube_dof_id:self.cube_dof_id+3].astype(np.float32)
         return observation
 
     def reset(self, seed=None, options=None):
@@ -262,10 +203,14 @@ class PushCubeEnv(Env):
 
         # Get the position of the cube and the distance between the end effector and the cube
         cube_pos = self.data.qpos[self.cube_dof_id:self.cube_dof_id+3]
+        ee_pos = self.data.qpos[self.arm_dof_id:self.arm_dof_id+3]
         cube_to_target = np.linalg.norm(cube_pos - self.target_pos)
+        cube_to_ee = np.linalg.norm(cube_pos - ee_pos)
+        ee_to_target = np.linalg.norm(ee_pos - self.target_pos)
 
         # Compute the reward
-        reward = -cube_to_target
+        # reward = -(cube_to_target + cube_to_ee)
+        reward = -(ee_to_target)
         return observation, reward, False, False, {}
 
     def render(self):

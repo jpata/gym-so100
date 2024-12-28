@@ -1,10 +1,10 @@
 import gymnasium as gym
 
-import gym_lowcostrobot  # noqa
+import gym_so100  # noqa
 
 
 def do_env_sim():
-    env = gym.make("PushCube-v0", observation_mode="state", render_mode="human", action_mode="ee")
+    env = gym.make("PushCube-v0", observation_mode="state", render_mode="human", action_mode="joint")
     env.reset()
 
     max_step = 1000000
@@ -12,8 +12,8 @@ def do_env_sim():
         action = env.action_space.sample()
         observation, reward, terminated, truncated, info = env.step(action)
 
-        # print("Observation:", observation)
-        # print("Reward:", reward)
+        print("Observation:", observation)
+        print("Reward:", reward)
 
         env.render()
         if terminated:
