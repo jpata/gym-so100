@@ -11,6 +11,54 @@ from gym_so100 import ASSETS_PATH
 BASE_LINK_NAME = "Rotation_Pitch"
 EE_LINK_NAME = "Fixed_Jaw"
 
+
+def get_collision_info(model, data):
+    """
+    Get collision information from the MuJoCo simulation.
+    
+    Args:
+        model (mujoco.MjModel): The MuJoCo model
+        data (mujoco.MjData): The MuJoCo simulation data
+    
+    Returns:
+        dict: Dictionary containing collision information
+            - contacts: List of active contacts
+            - contact_forces: Contact forces for each collision
+            - colliding_bodies: Pairs of bodies that are in contact
+    """
+    collision_info = {
+        'contacts': [],
+        'contact_forces': [],
+        'colliding_bodies': set()
+    }
+    
+    # Iterate through all contacts in the simulation
+    for i in range(data.ncon):
+        contact = data.contact[i]
+        
+        # Get the geom names involved in the contact
+        geom1_id = contact.geom1
+        geom2_id = contact.geom2
+        geom1_name = model.geom(geom1_id).name
+        geom2_name = model.geom(geom2_id).name
+        
+        # Get the contact force magnitude
+        force_magnitude = np.linalg.norm(data.efc_force[data.contact[i].efc_address:data.contact[i].efc_address + contact.dim])
+        
+        contact_info = {
+            'geom1': geom1_name,
+            'geom2': geom2_name,
+            'pos': contact.pos.copy(),
+            'force': force_magnitude,
+            'friction': contact.friction.copy()
+        }
+        
+        collision_info['contacts'].append(contact_info)
+        collision_info['contact_forces'].append(force_magnitude)
+        collision_info['colliding_bodies'].add((geom1_name, geom2_name))
+    
+    return collision_info
+
 def get_joint_forces(data):
     """
     Get the total force on all joints in the MuJoCo simulation.
@@ -277,9 +325,36 @@ class PushCubeEnv(Env):
         forces = get_joint_forces(self.data)
         mag_total_force = sum([abs(v) for v in forces["total"].values()])
 
+        collision_info = get_collision_info(self.model, self.data)
+        cb = collision_info["colliding_bodies"]
+        print(cb)
+        # print(collision_info["contact_forces"])
+        collide_floor = (
+            ("floor", "fixed_jaw_pad_1") in cb or
+            ("floor", "fixed_jaw_pad_2") in cb or
+            ("floor", "fixed_jaw_pad_3") in cb or
+            ("floor", "fixed_jaw_pad_4") in cb or
+            ("floor", "moving_jaw_pad_1") in cb or
+            ("floor", "moving_jaw_pad_2") in cb or
+            ("floor", "moving_jaw_pad_3") in cb or
+            ("floor", "moving_jaw_pad_4") in cb or
+
+            ("fixed_jaw_pad_1", "") in cb or
+            ("fixed_jaw_pad_2", "") in cb or
+            ("fixed_jaw_pad_3", "") in cb or
+            ("fixed_jaw_pad_4", "") in cb or
+            ("moving_jaw_pad_1", "") in cb or
+            ("moving_jaw_pad_2", "") in cb or
+            ("moving_jaw_pad_3", "") in cb or
+            ("moving_jaw_pad_4", "") in cb
+        )
+
         # Compute the reward
         # Higher values (more positive) are better
         reward = -cube_to_target #- 0.1*cube_to_ee - 0.0001*mag_total_force + 0.01*ee_pos[1]
+        if collide_floor:
+            reward -= 0.02
+
         return observation, reward, False, False, {}
 
 
