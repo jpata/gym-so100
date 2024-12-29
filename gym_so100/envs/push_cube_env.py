@@ -146,7 +146,7 @@ class PushCubeEnv(Env):
         # Set the action space
         self.action_mode = action_mode
         action_shape = {"joint": 6, "ee": 4}[action_mode]
-        self.action_space = spaces.Box(low=-3, high=3, shape=(action_shape,), dtype=np.float32)
+        self.action_space = spaces.Box(low=-1, high=1, shape=(action_shape,), dtype=np.float32)
  
         self.nb_dof = 6
 
@@ -162,7 +162,7 @@ class PushCubeEnv(Env):
             observation_subspaces["image_top"] = spaces.Box(0, 255, shape=(240, 320, 3), dtype=np.uint8)
             self.renderer = mujoco.Renderer(self.model)
         if self.observation_mode in ["state", "both"]:
-            observation_subspaces["environment_state"] = spaces.Box(low=-10.0, high=10.0, shape=(3,))
+            observation_subspaces["environment_state"] = spaces.Box(low=-10.0, high=10.0, shape=(9,))
 
         self.observation_space = gym.spaces.Dict(observation_subspaces)
 
@@ -203,7 +203,10 @@ class PushCubeEnv(Env):
         """
         target_low = np.array([-2.2, -3.14158, 0, -2.0, -3.14158, -0.2])
         target_high = np.array([2.2, 0.2, 3.14158, 1.8, 3.14158, 2.0])
-        target_qpos = np.deg2rad(np.array(action))#.clip(target_low, target_high)
+        source_low = -1
+        source_high= 1
+        normalized = (action - source_low) / (source_high - source_low)
+        target_qpos = normalized * (target_high - target_low) + target_low
 
         # Set the target position
         self.data.ctrl = target_qpos
@@ -229,7 +232,10 @@ class PushCubeEnv(Env):
             self.renderer.update_scene(self.data, camera="camera_top")
             observation["image_top"] = self.renderer.render()
         if self.observation_mode in ["state", "both"]:
-            observation["environment_state"] = self.data.qpos[self.cube_dof_id:self.cube_dof_id+3].astype(np.float32)
+            observation["environment_state"] = np.concatenate([
+                self.data.qpos[self.arm_dof_id:self.arm_dof_id+self.nb_dof].astype(np.float32),
+                self.data.qpos[self.cube_dof_id:self.cube_dof_id+3].astype(np.float32)
+            ])
         return observation
 
     def reset(self, seed=None, options=None):
@@ -273,7 +279,7 @@ class PushCubeEnv(Env):
 
         # Compute the reward
         # Higher values (more positive) are better
-        reward = -cube_to_target - 0.1*cube_to_ee - 0.0005*mag_total_force
+        reward = -cube_to_target #- 0.1*cube_to_ee - 0.0001*mag_total_force + 0.01*ee_pos[1]
         return observation, reward, False, False, {}
 
 

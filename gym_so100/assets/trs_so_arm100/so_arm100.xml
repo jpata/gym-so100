@@ -30,24 +30,24 @@
   <default>
     <default class="so_arm100">
       <joint frictionloss="0.1" armature="0.1"/>
-      <position kp="50" dampratio="1" forcerange="-35 35" ctrlrange="-3.14158 3.14158"/>
+      <position kp="50" forcerange="-35 35" ctrlrange="-3.14158 3.14158" forcelimited="true" ctrllimited="true"/>
       <default class="Rotation">
-        <joint axis="0 1 0" range="-2.2 2.2"/>
+        <joint axis="0 1 0" range="-2.2 2.2" limited="true"/>
       </default>
       <default class="Pitch">
-        <joint axis="1 0 0" range="-3.14158 0.2"/>
+        <joint axis="1 0 0" range="-3.14158 0.2" limited="true"/>
       </default>
       <default class="Elbow">
-        <joint axis="1 0 0" range="0 3.14158"/>
+        <joint axis="1 0 0" range="0 3.14158" limited="true"/>
       </default>
       <default class="Wrist_Pitch">
-        <joint axis="1 0 0" range="-2.0 1.8"/>
+        <joint axis="1 0 0" range="-2.0 1.8" limited="true"/>
       </default>
       <default class="Wrist_Roll">
-        <joint axis="0 1 0" range="-3.14158 3.14158"/>
+        <joint axis="0 1 0" range="-3.14158 3.14158" limited="true"/>
       </default>
       <default class="Jaw">
-        <joint axis="0 0 1" range="-0.2 2.0"/>
+        <joint axis="0 0 1" range="-0.2 2.0" limited="true"/>
       </default>
       <default class="visual">
         <geom type="mesh" contype="0" conaffinity="0" density="0" group="2" material="orange"/>
