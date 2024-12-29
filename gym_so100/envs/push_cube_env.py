@@ -110,10 +110,10 @@ def get_joint_forces(data):
     for name in joint_names:
         total_forces[name] = (
             forces['qfrc_actuator'][name] +
-            forces['qfrc_bias'][name] +
-            forces['qfrc_constraint'][name] +
-            forces['qfrc_applied'][name] +
-            forces['qfrc_passive'][name]
+            forces['qfrc_bias'][name]
+            # forces['qfrc_constraint'][name] +
+            # forces['qfrc_applied'][name] +
+            # forces['qfrc_passive'][name]
         )
     
     forces['total'] = total_forces
@@ -193,7 +193,7 @@ class PushCubeEnv(Env):
 
         # Set the action space
         self.action_mode = action_mode
-        action_shape = {"joint": 6, "ee": 4}[action_mode]
+        action_shape = 6
         self.action_space = spaces.Box(low=-1, high=1, shape=(action_shape,), dtype=np.float32)
  
         self.nb_dof = 6
@@ -226,8 +226,8 @@ class PushCubeEnv(Env):
 
         # Set additional utils
         self.threshold_height = 0.5
-        self.cube_low = np.array([-0.15, -0.35, 0.015])
-        self.cube_high = np.array([0.15, -0.25, 0.015])
+        self.cube_low = np.array([-0.1, -0.1, 0.0])
+        self.cube_high = np.array([0.1, -0.1, 0.0])
         self.target_low = np.array([-0.15, -0.35, 0.005])
         self.target_high = np.array([0.15, -0.25, 0.005])
 
@@ -235,11 +235,8 @@ class PushCubeEnv(Env):
         self.cube_dof_id = self.model.body("cube").dofadr[0]
         self.arm_dof_id = self.model.body(BASE_LINK_NAME).dofadr[0]
         self.arm_dof_vel_id = self.arm_dof_id
-        # if the arm is not at address 0 then the cube will have 7 states in qpos and 6 in qvel
-        if self.arm_dof_id != 0:
-            self.arm_dof_id = self.arm_dof_vel_id + 1
 
-        self.control_decimation = 4 # number of simulation steps per control step
+        self.control_decimation = 2 # number of simulation steps per control step
 
     def apply_action(self, action):
         """
@@ -267,8 +264,6 @@ class PushCubeEnv(Env):
 
 
     def get_observation(self):
-        # pos is [x, y, z, qw, qx, qy, qz, q1, q2, q3, q4, q5, q6, gripper]
-        # vel is [vx, vy, vz, wx, wy, wz, dq1, dq2, dq3, dq4, dq5, dq6, dgripper]
         observation = {
             "agent_pos": self.data.qpos[self.arm_dof_id:self.arm_dof_id+self.nb_dof].astype(np.float32),
             "agent_vel": self.data.qvel[self.arm_dof_vel_id:self.arm_dof_vel_id+self.nb_dof].astype(np.float32),
@@ -290,15 +285,16 @@ class PushCubeEnv(Env):
         # We need the following line to seed self.np_random
         super().reset(seed=seed, options=options)
 
+        self.target_pos = self.np_random.uniform(self.target_low, self.target_high).astype(np.float32)
+
         # Reset the robot to the initial position and sample the cube position
-        cube_pos = self.np_random.uniform(self.cube_low, self.cube_high)
+        cube_pos = self.target_pos + self.np_random.uniform(self.cube_low, self.cube_high)
         cube_rot = np.array([1.0, 0.0, 0.0, 0.0])
         robot_qpos = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         self.data.qpos[self.arm_dof_id:self.arm_dof_id+self.nb_dof] = robot_qpos
         self.data.qpos[self.cube_dof_id:self.cube_dof_id+7] = np.concatenate([cube_pos, cube_rot])
 
         # Sample the target position
-        self.target_pos = self.np_random.uniform(self.target_low, self.target_high).astype(np.float32)
 
         # update visualization
         self.model.geom('target_region').pos = self.target_pos[:]
@@ -317,18 +313,13 @@ class PushCubeEnv(Env):
 
         # Get the position of the cube and the distance between the end effector and the cube
         cube_pos = self.data.qpos[self.cube_dof_id:self.cube_dof_id+3]
-        ee_pos = self.data.qpos[self.arm_dof_id:self.arm_dof_id+3]
         cube_to_target = np.linalg.norm(cube_pos - self.target_pos)
-        cube_to_ee = np.linalg.norm(cube_pos - ee_pos)
-        ee_to_target = np.linalg.norm(ee_pos - self.target_pos)
 
         forces = get_joint_forces(self.data)
         mag_total_force = sum([abs(v) for v in forces["total"].values()])
 
         collision_info = get_collision_info(self.model, self.data)
         cb = collision_info["colliding_bodies"]
-        print(cb)
-        # print(collision_info["contact_forces"])
         collide_floor = (
             ("floor", "fixed_jaw_pad_1") in cb or
             ("floor", "fixed_jaw_pad_2") in cb or
@@ -349,13 +340,20 @@ class PushCubeEnv(Env):
             ("moving_jaw_pad_4", "") in cb
         )
 
+        # print(action, cube_to_target, collide_floor, mag_total_force)
+
         # Compute the reward
         # Higher values (more positive) are better
-        reward = -cube_to_target #- 0.1*cube_to_ee - 0.0001*mag_total_force + 0.01*ee_pos[1]
+        reward = -cube_to_target - 0.001*mag_total_force
         if collide_floor:
-            reward -= 0.02
+            reward -= 0.5
 
-        return observation, reward, False, False, {}
+        success = cube_to_target < 0.01
+        terminated = success
+        truncated = False
+        info = {"is_success": success}
+
+        return observation, reward, terminated, truncated, info
 
 
     def render(self):
