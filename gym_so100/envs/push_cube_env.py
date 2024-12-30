@@ -228,33 +228,26 @@ class PushCubeEnv(Env):
         self.threshold_height = 0.5
         self.cube_low = np.array([-0.1, -0.1, 0.0])
         self.cube_high = np.array([0.1, -0.1, 0.0])
-        self.target_low = np.array([-0.15, -0.35, 0.005])
-        self.target_high = np.array([0.15, -0.25, 0.005])
+        self.target_low = np.array([-0.15, -0.25, 0.005])
+        self.target_high = np.array([0.15, -0.15, 0.005])
 
         # get dof addresses
         self.cube_dof_id = self.model.body("cube").dofadr[0]
         self.arm_dof_id = self.model.body(BASE_LINK_NAME).dofadr[0]
         self.arm_dof_vel_id = self.arm_dof_id
 
-        self.control_decimation = 2 # number of simulation steps per control step
+        self.control_decimation = 1 # number of simulation steps per control step
 
     def apply_action(self, action):
         """
-        Step the simulation forward based on the action
-
-        Action shape
-        - EE mode: [dx, dy, dz, gripper]
-        - Joint mode: [q1, q2, q3, q4, q5, q6, gripper]
+        Step the simulation forward based on the action.
+        Actions must be radians, in the allowed range of the joints.
+        Note that when training, the policy must normalize the outputs to the allowed range
         """
         target_low = np.array([-2.2, -3.14158, 0, -2.0, -3.14158, -0.2])
         target_high = np.array([2.2, 0.2, 3.14158, 1.8, 3.14158, 2.0])
-        source_low = -1
-        source_high= 1
-        normalized = (action - source_low) / (source_high - source_low)
-        target_qpos = normalized * (target_high - target_low) + target_low
-
         # Set the target position
-        self.data.ctrl = target_qpos
+        self.data.ctrl = action.clip(target_low, target_high)
 
         # Step the simulation forward
         for _ in range(self.control_decimation):
@@ -291,7 +284,7 @@ class PushCubeEnv(Env):
         # Reset the robot to the initial position and sample the cube position
         cube_pos = self.target_pos + self.np_random.uniform(self.cube_low, self.cube_high)
         cube_rot = np.array([1.0, 0.0, 0.0, 0.0])
-        robot_qpos = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        robot_qpos = np.array([0.0, -3.14, 3, 1.24, 0.0, 0.0])
         self.data.qpos[self.arm_dof_id:self.arm_dof_id+self.nb_dof] = robot_qpos
         self.data.qpos[self.cube_dof_id:self.cube_dof_id+7] = np.concatenate([cube_pos, cube_rot])
 
@@ -349,7 +342,7 @@ class PushCubeEnv(Env):
         if collide_floor:
             reward -= 0.5
 
-        success = cube_to_target < 0.01
+        success = cube_to_target < 0.03
         terminated = success
         truncated = False
         info = {"is_success": success}
