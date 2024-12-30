@@ -262,11 +262,13 @@ class PushCubeEnv(Env):
             "agent_vel": self.data.qvel[self.arm_dof_vel_id:self.arm_dof_vel_id+self.nb_dof].astype(np.float32),
             "target_pos": self.target_pos,
         }
+
         if self.observation_mode in ["image", "both"]:
             self.renderer.update_scene(self.data, camera="camera_front")
             observation["image_front"] = self.renderer.render()
             self.renderer.update_scene(self.data, camera="camera_top")
             observation["image_top"] = self.renderer.render()
+
         if self.observation_mode in ["state", "both"]:
             observation["environment_state"] = np.concatenate([
                 self.data.qpos[self.cube_dof_id:self.cube_dof_id+3].astype(np.float32),
