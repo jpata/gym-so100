@@ -159,7 +159,7 @@ class PushCubeEnv(Env):
     - `"target_pos"`: the position of the target, as (x, y, z)
     - `"image_front"`: the front image of the camera of size (240, 320, 3)
     - `"image_top"`: the top image of the camera of size (240, 320, 3)
-    - `"env_state"`: the position of the cube and target as (x, y, z)
+    - `"environment_state"`: the position of the cube and target as (x, y, z)
 
     Three observation modes are available: "image" (default), "state", and "both".
 
