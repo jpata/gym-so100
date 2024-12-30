@@ -236,7 +236,7 @@ class PushCubeEnv(Env):
         self.arm_dof_id = self.model.body(BASE_LINK_NAME).dofadr[0]
         self.arm_dof_vel_id = self.arm_dof_id
 
-        self.control_decimation = 1 # number of simulation steps per control step
+        self.control_decimation = 4 # number of simulation steps per control step
 
     def apply_action(self, action):
         """
