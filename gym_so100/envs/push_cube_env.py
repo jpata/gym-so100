@@ -159,18 +159,18 @@ class PushCubeEnv(Env):
     - `"target_pos"`: the position of the target, as (x, y, z)
     - `"image_front"`: the front image of the camera of size (240, 320, 3)
     - `"image_top"`: the top image of the camera of size (240, 320, 3)
-    - `"environment_state"`: the position of the cube, as (x, y, z)
+    - `"env_state"`: the position of the cube and target as (x, y, z)
 
     Three observation modes are available: "image" (default), "state", and "both".
 
     | Key             | `"image"` | `"state"` | `"both"` |
     | --------------- | --------- | --------- | -------- |
-    | `"agent_pos"`    | ✓         | ✓         | ✓        |
-    | `"agent_vel"`    | ✓         | ✓         | ✓        |
+    | `"agent_pos"`   | ✓         | ✓         | ✓        |
+    | `"agent_vel"`   | ✓         | ✓         | ✓        |
     | `"target_pos"`  | ✓         | ✓         | ✓        |
     | `"image_front"` | ✓         |           | ✓        |
     | `"image_top"`   | ✓         |           | ✓        |
-    | `"environment_state"`    |           | ✓         | ✓        |
+    | `"env_state"`   |           | ✓         | ✓        |
 
     ## Reward
 
@@ -210,7 +210,7 @@ class PushCubeEnv(Env):
             observation_subspaces["image_top"] = spaces.Box(0, 255, shape=(240, 320, 3), dtype=np.uint8)
             self.renderer = mujoco.Renderer(self.model)
         if self.observation_mode in ["state", "both"]:
-            observation_subspaces["environment_state"] = spaces.Box(low=-10.0, high=10.0, shape=(12,))
+            observation_subspaces["env_state"] = spaces.Box(low=-10.0, high=10.0, shape=(6,))
 
         self.observation_space = gym.spaces.Dict(observation_subspaces)
 
@@ -268,8 +268,7 @@ class PushCubeEnv(Env):
             self.renderer.update_scene(self.data, camera="camera_top")
             observation["image_top"] = self.renderer.render()
         if self.observation_mode in ["state", "both"]:
-            observation["environment_state"] = np.concatenate([
-                self.data.qpos[self.arm_dof_id:self.arm_dof_id+self.nb_dof].astype(np.float32),
+            observation["env_state"] = np.concatenate([
                 self.data.qpos[self.cube_dof_id:self.cube_dof_id+3].astype(np.float32),
                 self.target_pos.astype(np.float32)
             ])
