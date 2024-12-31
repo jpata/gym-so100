@@ -236,7 +236,7 @@ class PushCubeEnv(Env):
         self.arm_dof_id = self.model.body(BASE_LINK_NAME).dofadr[0]
         self.arm_dof_vel_id = self.arm_dof_id
 
-        self.control_decimation = 4 # number of simulation steps per control step
+        self.control_decimation = 2 # number of simulation steps per control step
 
     def apply_action(self, action):
         """
@@ -323,25 +323,29 @@ class PushCubeEnv(Env):
             ("floor", "moving_jaw_pad_1") in cb or
             ("floor", "moving_jaw_pad_2") in cb or
             ("floor", "moving_jaw_pad_3") in cb or
-            ("floor", "moving_jaw_pad_4") in cb or
+            ("floor", "moving_jaw_pad_4") in cb
+        )
 
-            ("fixed_jaw_pad_1", "") in cb or
-            ("fixed_jaw_pad_2", "") in cb or
-            ("fixed_jaw_pad_3", "") in cb or
-            ("fixed_jaw_pad_4", "") in cb or
-            ("moving_jaw_pad_1", "") in cb or
-            ("moving_jaw_pad_2", "") in cb or
-            ("moving_jaw_pad_3", "") in cb or
-            ("moving_jaw_pad_4", "") in cb
+        collide_box = (
+            ("fixed_jaw_pad_1", "red_box") in cb or
+            ("fixed_jaw_pad_2", "red_box") in cb or
+            ("fixed_jaw_pad_3", "red_box") in cb or
+            ("fixed_jaw_pad_4", "red_box") in cb or
+            ("moving_jaw_pad_1", "red_box") in cb or
+            ("moving_jaw_pad_2", "red_box") in cb or
+            ("moving_jaw_pad_3", "red_box") in cb or
+            ("moving_jaw_pad_4", "red_box") in cb
         )
 
         # print(action, cube_to_target, collide_floor, mag_total_force)
 
         # Compute the reward
         # Higher values (more positive) are better
-        reward = -cube_to_target - 0.001*mag_total_force
+        reward = -cube_to_target
         if collide_floor:
             reward -= 0.5
+        if collide_box:
+            reward += 0.5
 
         success = cube_to_target < 0.03
         terminated = success
