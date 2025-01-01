@@ -247,6 +247,7 @@ class PushCubeEnv(Env):
         target_low = np.array([-2.2, -3.14158, 0, -2.0, -3.14158, -0.2])
         target_high = np.array([2.2, 0.2, 3.14158, 1.8, 3.14158, 2.0])
         # Set the target position
+        # self.data.ctrl = action.clip(target_low, target_high)
         self.data.ctrl = action.clip(target_low, target_high)
 
         # Step the simulation forward
@@ -326,11 +327,13 @@ class PushCubeEnv(Env):
             ("floor", "moving_jaw_pad_4") in cb
         )
 
-        collide_box = (
+        collide_box_fixed = (
             ("fixed_jaw_pad_1", "red_box") in cb or
             ("fixed_jaw_pad_2", "red_box") in cb or
             ("fixed_jaw_pad_3", "red_box") in cb or
-            ("fixed_jaw_pad_4", "red_box") in cb or
+            ("fixed_jaw_pad_4", "red_box") in cb
+        )
+        collide_box_moving = (
             ("moving_jaw_pad_1", "red_box") in cb or
             ("moving_jaw_pad_2", "red_box") in cb or
             ("moving_jaw_pad_3", "red_box") in cb or
@@ -344,10 +347,12 @@ class PushCubeEnv(Env):
         reward = -cube_to_target
         if collide_floor:
             reward -= 0.5
-        if collide_box:
+        if collide_box_fixed:
+            reward += 0.5
+        if collide_box_moving:
             reward += 0.5
 
-        success = cube_to_target < 0.03
+        success = False
         terminated = success
         truncated = False
         info = {"is_success": success}
