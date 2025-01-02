@@ -236,7 +236,7 @@ class PushCubeEnv(Env):
         self.arm_dof_id = self.model.body(BASE_LINK_NAME).dofadr[0]
         self.arm_dof_vel_id = self.arm_dof_id
 
-        self.control_decimation = 2 # number of simulation steps per control step
+        self.control_decimation = 20 # number of simulation steps per control step
 
     def apply_action(self, action):
         """
@@ -309,7 +309,11 @@ class PushCubeEnv(Env):
 
         # Get the position of the cube and the distance between the end effector and the cube
         cube_pos = self.data.qpos[self.cube_dof_id:self.cube_dof_id+3]
+        ee_id = self.model.site("end_effector_site").id
+        ee_pos = self.data.qpos[ee_id:ee_id+3]
+
         cube_to_target = np.linalg.norm(cube_pos - self.target_pos)
+        ee_to_cube = np.linalg.norm(cube_pos - ee_pos)
 
         forces = get_joint_forces(self.data)
         mag_total_force = sum([abs(v) for v in forces["total"].values()])
@@ -345,6 +349,10 @@ class PushCubeEnv(Env):
         # Compute the reward
         # Cube should be pushed closer to target
         reward = -cube_to_target
+
+        # EE should be close to cube
+        reward = -ee_to_cube
+
         # Minimize the acceleration
         mag_acc = np.linalg.norm(self.data.qacc[self.arm_dof_vel_id:self.arm_dof_vel_id+self.nb_dof])
         reward -= 0.001*mag_acc
@@ -358,6 +366,8 @@ class PushCubeEnv(Env):
             reward += 0.5
         if collide_box_moving:
             reward += 0.5
+
+        print(reward)
 
         success = False
         terminated = success
