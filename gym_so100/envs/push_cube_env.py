@@ -343,10 +343,17 @@ class PushCubeEnv(Env):
         # print(action, cube_to_target, collide_floor, mag_total_force)
 
         # Compute the reward
-        # Higher values (more positive) are better
+        # Cube should be pushed closer to target
         reward = -cube_to_target
+        # Minimize the acceleration
+        mag_acc = np.linalg.norm(self.data.qacc[self.arm_dof_vel_id:self.arm_dof_vel_id+self.nb_dof])
+        reward -= 0.001*mag_acc
+
+        # Discourage touching the floor with the gripper
         if collide_floor:
-            reward -= 0.5
+            reward -= 0.01
+
+        # Encourage touching the cube with the gripper
         if collide_box_fixed:
             reward += 0.5
         if collide_box_moving:

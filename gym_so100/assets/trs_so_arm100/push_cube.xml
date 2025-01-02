@@ -1,6 +1,6 @@
 <mujoco model="so100">
     <!-- The timestep has a big influence on the contacts stability -->
-    <option cone="elliptic" impratio="10" timestep="0.005"/>
+    <option cone="elliptic" impratio="10" timestep="0.002"/>
   
     <include file="so_arm100.xml"/>
   
