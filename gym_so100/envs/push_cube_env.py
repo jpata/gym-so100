@@ -375,7 +375,7 @@ class PushCubeEnv(Env):
         if collide_box_moving:
             reward += 0.5
 
-        print(reward)
+        # print(reward)
 
         success = False
         terminated = success
