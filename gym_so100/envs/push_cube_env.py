@@ -226,8 +226,8 @@ class PushCubeEnv(Env):
 
         # Set additional utils
         self.threshold_height = 0.5
-        self.cube_low = np.array([-0.1, -0.1, 0.0])
-        self.cube_high = np.array([0.1, -0.1, 0.0])
+        self.cube_low = np.array([-0.1, -0.1, 0.005])
+        self.cube_high = np.array([0.1, -0.1, 0.005])
         self.target_low = np.array([-0.15, -0.25, 0.005])
         self.target_high = np.array([0.15, -0.15, 0.005])
 
@@ -247,8 +247,15 @@ class PushCubeEnv(Env):
         target_low = np.array([-2.2, -3.14158, 0, -2.0, -3.14158, -0.2])
         target_high = np.array([2.2, 0.2, 3.14158, 1.8, 3.14158, 2.0])
         # Set the target position
-        # self.data.ctrl = action.clip(target_low, target_high)
-        self.data.ctrl = action.clip(target_low, target_high)
+
+        current_joint_angles = self.data.qpos[self.arm_dof_id:self.arm_dof_id+self.nb_dof]
+        target_arm_qpos = np.clip(
+            action + current_joint_angles,
+            target_low,
+            target_high,
+        )
+
+        self.data.ctrl = target_arm_qpos
 
         # Step the simulation forward
         for _ in range(self.control_decimation):
@@ -344,6 +351,7 @@ class PushCubeEnv(Env):
             ("moving_jaw_pad_4", "red_box") in cb
         )
 
+        # print(collision_info)
         # print(action, cube_to_target, collide_floor, mag_total_force)
 
         # Compute the reward
@@ -351,15 +359,15 @@ class PushCubeEnv(Env):
         reward = -cube_to_target
 
         # EE should be close to cube
-        reward = -ee_to_cube
+        reward = -0.01*ee_to_cube
 
         # Minimize the acceleration
         mag_acc = np.linalg.norm(self.data.qacc[self.arm_dof_vel_id:self.arm_dof_vel_id+self.nb_dof])
         reward -= 0.001*mag_acc
 
         # Discourage touching the floor with the gripper
-        if collide_floor:
-            reward -= 0.01
+        if not collide_floor:
+            reward += 0.01
 
         # Encourage touching the cube with the gripper
         if collide_box_fixed:
