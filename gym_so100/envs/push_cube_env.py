@@ -356,10 +356,11 @@ class PushCubeEnv(Env):
 
         # Compute the reward
         # Cube should be pushed closer to target
-        reward = -cube_to_target
+        reward = 0.0
+        reward -= cube_to_target
 
         # EE should be close to cube
-        reward = -0.01*ee_to_cube
+        reward -= 0.01*ee_to_cube
 
         # Minimize the acceleration
         mag_acc = np.linalg.norm(self.data.qacc[self.arm_dof_vel_id:self.arm_dof_vel_id+self.nb_dof])
@@ -374,8 +375,9 @@ class PushCubeEnv(Env):
             reward += 0.5
         if collide_box_moving:
             reward += 0.5
-
-        # print(reward)
+        
+        # if cube_to_target < 0.1:
+        #     reward += 1
 
         success = False
         terminated = success
