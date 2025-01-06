@@ -184,7 +184,7 @@ class PushCubeEnv(Env):
     - `render_mode (str)`: the render mode, can be "human" or "rgb_array", default is None.
     """
 
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 200}
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 25}
 
     def __init__(self, observation_mode="image", action_mode="joint", render_mode=None):
         # Load the MuJoCo model and data
@@ -249,6 +249,7 @@ class PushCubeEnv(Env):
         # Set the target position
 
         current_joint_angles = self.data.qpos[self.arm_dof_id:self.arm_dof_id+self.nb_dof]
+        action[1:] = 0
         target_arm_qpos = np.clip(
             action + current_joint_angles,
             target_low,
@@ -356,8 +357,8 @@ class PushCubeEnv(Env):
 
         # Compute the reward
         # Cube should be pushed closer to target
-        reward = 10
-        reward -= cube_to_target
+        reward = 0
+        # reward -= cube_to_target
 
         # EE should be close to cube
         reward -= 0.1*ee_to_cube
@@ -369,19 +370,17 @@ class PushCubeEnv(Env):
         # reward -= 0.01*mag_total_force
 
         # Discourage touching the floor with the gripper
-        if collide_floor:
-            reward -= 0.1
+        # if collide_floor:
+        #     reward -= 0.1
 
         # Encourage touching the cube with the gripper
-        if collide_box_fixed:
-            reward += 0.1
-        if collide_box_moving:
-            reward += 0.1
+        # if collide_box_fixed:
+        #     reward += 0.1
+        # if collide_box_moving:
+        #     reward += 0.1
         
-        if cube_to_target < 0.1:
-            reward += 0.5
-
-        print("reward", reward)
+        # if cube_to_target < 0.1:
+        #     reward += 0.5
 
         success = False
         terminated = success
