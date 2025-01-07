@@ -249,7 +249,6 @@ class PushCubeEnv(Env):
         # Set the target position
 
         current_joint_angles = self.data.qpos[self.arm_dof_id:self.arm_dof_id+self.nb_dof]
-        action[1:] = 0
         target_arm_qpos = np.clip(
             action + current_joint_angles,
             target_low,
@@ -358,7 +357,7 @@ class PushCubeEnv(Env):
         # Compute the reward
         # Cube should be pushed closer to target
         reward = 0
-        # reward -= cube_to_target
+        reward -= cube_to_target
 
         # EE should be close to cube
         reward -= 0.1*ee_to_cube
@@ -366,21 +365,20 @@ class PushCubeEnv(Env):
         # Minimize the acceleration
         # mag_acc = np.linalg.norm(self.data.qacc[self.arm_dof_vel_id:self.arm_dof_vel_id+self.nb_dof])
         # reward -= 0.001*mag_acc
-        
         # reward -= 0.01*mag_total_force
 
         # Discourage touching the floor with the gripper
-        # if collide_floor:
-        #     reward -= 0.1
+        if collide_floor:
+            reward -= 0.1
 
         # Encourage touching the cube with the gripper
-        # if collide_box_fixed:
-        #     reward += 0.1
-        # if collide_box_moving:
-        #     reward += 0.1
+        if collide_box_fixed:
+            reward += 0.1
+        if collide_box_moving:
+            reward += 0.1
         
-        # if cube_to_target < 0.1:
-        #     reward += 0.5
+        if cube_to_target < 0.1:
+            reward += 0.5
 
         success = False
         terminated = success
