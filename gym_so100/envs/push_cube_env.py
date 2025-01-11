@@ -186,17 +186,19 @@ class PushCubeEnv(Env):
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 25}
 
-    def __init__(self, observation_mode="image", action_mode="joint", render_mode=None):
+    def __init__(self, observation_mode="image", action_mode="joint", render_mode=None, curriculum_level=0):
         # Load the MuJoCo model and data
         self.model = mujoco.MjModel.from_xml_path(os.path.join(ASSETS_PATH, "push_cube.xml"), {})
         self.data = mujoco.MjData(self.model)
 
         # Set the action space
         self.action_mode = action_mode
-        action_shape = 6
-        self.action_space = spaces.Box(low=-1, high=1, shape=(action_shape,), dtype=np.float32)
- 
+        self.action_shape = 6
+        self.action_space = spaces.Box(low=-1, high=1, shape=(self.action_shape,), dtype=np.float32)
         self.nb_dof = 6
+
+        # Curriculum settings
+        self.curriculum_level = curriculum_level        
 
         # Set the observations space
         self.observation_mode = observation_mode
@@ -287,11 +289,33 @@ class PushCubeEnv(Env):
     def reset(self, seed=None, options=None):
         # We need the following line to seed self.np_random
         super().reset(seed=seed, options=options)
+        
+        params = self.get_curriculum_parameters()
+        
+        # Sample positions based on current curriculum ranges
+        cube_range = params["cube_pos_range"]
+        target_range = params["target_pos_range"]
 
-        self.target_pos = self.np_random.uniform(self.target_low, self.target_high).astype(np.float32)
+        # Keep sampling positions until minimum distance constraint is satisfied
+        while True:
+            # Sample target position first
+            self.target_pos = self.np_random.uniform(
+                target_range["low"],
+                target_range["high"]
+            ).astype(np.float32)
+            
+            # Sample cube position
+            cube_pos = self.target_pos + self.np_random.uniform(
+                cube_range["low"],
+                cube_range["high"]
+            ).astype(np.float32)
+            
+            # Check if distance constraint is satisfied
+            distance = np.linalg.norm(cube_pos[:2] - self.target_pos[:2])  # Only check x-y distance
+            if distance >= 0.015:
+                break
 
-        # Reset the robot to the initial position and sample the cube position
-        cube_pos = self.target_pos + self.np_random.uniform(self.cube_low, self.cube_high)
+
         cube_rot = np.array([1.0, 0.0, 0.0, 0.0])
         robot_qpos = np.array([0.0, -3.14, 3, 1.24, 0.0, 0.0])
         self.data.qpos[self.arm_dof_id:self.arm_dof_id+self.nb_dof] = robot_qpos
@@ -307,82 +331,238 @@ class PushCubeEnv(Env):
 
         return self.get_observation(), {}
 
-    def step(self, action):
-        # Perform the action and step the simulation
-        self.apply_action(action)
+    def get_curriculum_parameters(self):
+        """
+        Get current curriculum parameters based on level.
+        Each level increases task complexity across multiple dimensions.
+        """
+        params = {
+            # Base workspace boundaries
+            "cube_pos_range": None,
+            "target_pos_range": None,
+            "required_height": None,
+            "placement_threshold": None,
+            "time_limit": None,
+            "reward_scales": None
+        }
+        
+        # Level 0: Simple reaching task
+        if self.curriculum_level == 0:
+            params.update({
+                "cube_pos_range": {
+                    "low": np.array([-0.03, -0.03, 0.0]),
+                    "high": np.array([0.03, 0.03, 0.0])
+                },
+                "target_pos_range": {
+                    "low": np.array([-0.05, -0.18, 0.005]),
+                    "high": np.array([0.05, -0.15, 0.005])
+                },
+                "required_height": 0.0,  # No lifting required
+                "placement_threshold": 0.08,  # Larger tolerance
+                "time_limit": 100,
+                "reward_scales": {
+                    "reaching": 1.0,
+                    "grasping": 0.5,
+                    "lifting": 0.0,  # No lifting reward yet
+                    "target": 0.3,
+                    "success": 2.0
+                }
+            })
+            
+        # Level 1: Basic grasping
+        elif self.curriculum_level == 1:
+            params.update({
+                "cube_pos_range": {
+                    "low": np.array([-0.05, -0.05, 0.0]),
+                    "high": np.array([0.05, 0.05, 0.0])
+                },
+                "target_pos_range": {
+                    "low": np.array([-0.10, -0.20, 0.005]),
+                    "high": np.array([0.10, -0.13, 0.005])
+                },
+                "required_height": 0.02,  # Slight lifting
+                "placement_threshold": 0.06,
+                "time_limit": 150,
+                "reward_scales": {
+                    "reaching": 0.8,
+                    "grasping": 1.0,
+                    "lifting": 0.3,
+                    "target": 0.4,
+                    "success": 3.0
+                }
+            })
+            
+        # Level 2: Basic lifting
+        elif self.curriculum_level == 2:
+            params.update({
+                "cube_pos_range": {
+                    "low": np.array([-0.07, -0.07, 0.0]),
+                    "high": np.array([0.07, 0.07, 0.0])
+                },
+                "target_pos_range": {
+                    "low": np.array([-0.12, -0.22, 0.005]),
+                    "high": np.array([0.12, -0.11, 0.005])
+                },
+                "required_height": 0.05,  # Significant lifting
+                "placement_threshold": 0.05,
+                "time_limit": 200,
+                "reward_scales": {
+                    "reaching": 0.6,
+                    "grasping": 1.0,
+                    "lifting": 0.8,
+                    "target": 0.6,
+                    "success": 4.0
+                }
+            })
+            
+        # Level 3: Extended workspace
+        elif self.curriculum_level == 3:
+            params.update({
+                "cube_pos_range": {
+                    "low": np.array([-0.09, -0.09, 0.0]),
+                    "high": np.array([0.09, 0.09, 0.0])
+                },
+                "target_pos_range": {
+                    "low": np.array([-0.15, -0.25, 0.005]),
+                    "high": np.array([0.15, -0.1, 0.005])
+                },
+                "required_height": 0.08,
+                "placement_threshold": 0.04,
+                "time_limit": 250,
+                "reward_scales": {
+                    "reaching": 0.4,
+                    "grasping": 1.0,
+                    "lifting": 1.0,
+                    "target": 0.8,
+                    "success": 5.0
+                }
+            })
+            
+        # Level 4: Precise placement
+        elif self.curriculum_level == 4:
+            params.update({
+                "cube_pos_range": {
+                    "low": np.array([-0.14, -0.14, 0.0]),
+                    "high": np.array([0.14, 0.14, 0.0])
+                },
+                "target_pos_range": {
+                    "low": np.array([-0.2, -0.3, 0.005]),
+                    "high": np.array([0.2, -0.1, 0.005])
+                },
+                "required_height": 0.1,
+                "placement_threshold": 0.03,
+                "time_limit": 300,
+                "reward_scales": {
+                    "reaching": 0.3,
+                    "grasping": 1.0,
+                    "lifting": 1.0,
+                    "target": 1.0,
+                    "success": 6.0
+                }
+            })
+            
+        # Level 5: Full task
+        else:
+            params.update({
+                "cube_pos_range": {
+                    "low": np.array([-0.16, -0.16, 0.0]),
+                    "high": np.array([0.16, 0.16, 0.0])
+                },
+                "target_pos_range": {
+                    "low": np.array([-0.25, -0.35, 0.005]),
+                    "high": np.array([0.25, -0.1, 0.005])
+                },
+                "required_height": 0.12,
+                "placement_threshold": 0.02,
+                "time_limit": 400,
+                "reward_scales": {
+                    "reaching": 0.2,
+                    "grasping": 1.0,
+                    "lifting": 1.0,
+                    "target": 1.2,
+                    "success": 8.0
+                }
+            })
+            
+        return params
 
-        # Get the new observation
-        observation = self.get_observation()
-
-        # Get the position of the cube and the distance between the end effector and the cube
+    def compute_reward(self, observation, action):
+        """
+        Compute reward with curriculum-adjusted scales and requirements
+        """
+        params = self.get_curriculum_parameters()
+        reward_scales = params["reward_scales"]
+        required_height = params["required_height"]
+        placement_threshold = params["placement_threshold"]
+        
+        # Get positions and collisions
         cube_pos = self.data.qpos[self.cube_dof_id:self.cube_dof_id+3]
         ee_id = self.model.site("end_effector_site").id
         ee_pos = self.data.qpos[ee_id:ee_id+3]
-
-        cube_to_target = np.linalg.norm(cube_pos - self.target_pos)
-        ee_to_cube = np.linalg.norm(cube_pos - ee_pos)
-
-        forces = get_joint_forces(self.data)
-        mag_total_force = sum([abs(v) for v in forces["total"].values()])
-
+        
         collision_info = get_collision_info(self.model, self.data)
         cb = collision_info["colliding_bodies"]
-        collide_floor = (
-            ("floor", "fixed_jaw_pad_1") in cb or
-            ("floor", "fixed_jaw_pad_2") in cb or
-            ("floor", "fixed_jaw_pad_3") in cb or
-            ("floor", "fixed_jaw_pad_4") in cb or
-            ("floor", "moving_jaw_pad_1") in cb or
-            ("floor", "moving_jaw_pad_2") in cb or
-            ("floor", "moving_jaw_pad_3") in cb or
-            ("floor", "moving_jaw_pad_4") in cb
-        )
-
-        collide_box_fixed = (
-            ("fixed_jaw_pad_1", "red_box") in cb or
-            ("fixed_jaw_pad_2", "red_box") in cb or
-            ("fixed_jaw_pad_3", "red_box") in cb or
-            ("fixed_jaw_pad_4", "red_box") in cb
-        )
-        collide_box_moving = (
-            ("moving_jaw_pad_1", "red_box") in cb or
-            ("moving_jaw_pad_2", "red_box") in cb or
-            ("moving_jaw_pad_3", "red_box") in cb or
-            ("moving_jaw_pad_4", "red_box") in cb
-        )
-
-        # print(collision_info)
-        # print(action, cube_to_target, collide_floor, mag_total_force)
-
-        # Compute the reward
-        # Cube should be pushed closer to target
-        reward = 0
-        reward -= cube_to_target
-
-        # EE should be close to cube
-        reward -= 0.1*ee_to_cube
-
-        # Minimize the acceleration
-        # mag_acc = np.linalg.norm(self.data.qacc[self.arm_dof_vel_id:self.arm_dof_vel_id+self.nb_dof])
-        # reward -= 0.001*mag_acc
-        # reward -= 0.01*mag_total_force
-
-        # Discourage touching the floor with the gripper
-        if collide_floor:
-            reward -= 0.1
-
-        # Encourage touching the cube with the gripper
-        if collide_box_fixed:
-            reward += 0.1
-        if collide_box_moving:
-            reward += 0.1
         
-        if cube_to_target < 0.1:
-            reward += 0.5
+        reward = 0.0
+        
+        # Reaching reward
+        ee_to_cube = np.linalg.norm(cube_pos - ee_pos)
+        reward += reward_scales["reaching"] * -ee_to_cube
+        
+        # Grasping reward
+        grasping_cube = any((pad, "red_box") in cb for pad in [
+            "fixed_jaw_pad_1", "fixed_jaw_pad_2", "fixed_jaw_pad_3", "fixed_jaw_pad_4",
+            "moving_jaw_pad_1", "moving_jaw_pad_2", "moving_jaw_pad_3", "moving_jaw_pad_4"
+        ])
+        if grasping_cube:
+            reward += reward_scales["grasping"]
+        
+        # Lifting reward
+        cube_height = cube_pos[2]
+        if required_height > 0 and cube_height > required_height:
+            lift_reward = (cube_height - required_height) / required_height
+            reward += reward_scales["lifting"] * lift_reward
+        
+        # Target reward
+        cube_to_target = np.linalg.norm(cube_pos - self.target_pos)
+        height_factor = max(0.1, min(1.0, cube_height / required_height if required_height > 0 else 0.0))
+        target_reward = -cube_to_target * height_factor
+        reward += reward_scales["target"] * target_reward
+        
+        # Success reward
+        if (cube_to_target < placement_threshold and 
+            abs(cube_height - self.target_pos[2]) < placement_threshold):
+            reward += reward_scales["success"]
+        
+        # Penalties (constant across curriculum)
+        collide_floor = any(("floor", pad) in cb for pad in [
+            "fixed_jaw_pad_1", "fixed_jaw_pad_2", "fixed_jaw_pad_3", "fixed_jaw_pad_4",
+            "moving_jaw_pad_1", "moving_jaw_pad_2", "moving_jaw_pad_3", "moving_jaw_pad_4"
+        ])
+        if collide_floor:
+            reward -= 1.0
+        
+        forces = get_joint_forces(self.data)
+        mag_total_force = sum(abs(v) for v in forces["total"].values())
+        reward -= 0.001 * mag_total_force
+        
+        reward -= 0.001 * np.sum(np.abs(action))
 
-        success = False
+        return reward
+
+    def step(self, action):
+        self.apply_action(action)
+        observation = self.get_observation()
+        reward = self.compute_reward(observation, action)
+
+        cube_pos = self.data.qpos[self.cube_dof_id:self.cube_dof_id+3]
+        cube_to_target = np.linalg.norm(cube_pos - self.target_pos)
+        success = (cube_to_target < 0.01 and 
+            abs(cube_pos[2] - self.target_pos[2]) < 0.01)
         terminated = success
         truncated = False
+        if success:
+            print("success")
         info = {"is_success": success}
 
         return observation, reward, terminated, truncated, info
