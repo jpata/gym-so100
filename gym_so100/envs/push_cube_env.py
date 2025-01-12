@@ -197,6 +197,11 @@ class PushCubeEnv(Env):
         self.action_space = spaces.Box(low=-1, high=1, shape=(self.action_shape,), dtype=np.float32)
         self.nb_dof = 6
 
+        self.joint_limits = {
+            'low': np.array([-2.2, -3.14158, 0, -2.0, -3.14158, -0.2]),
+            'high': np.array([2.2, 0.2, 3.14158, 1.8, 3.14158, 2.0])
+        }
+
         # Curriculum settings
         self.curriculum_level = curriculum_level        
 
@@ -246,15 +251,13 @@ class PushCubeEnv(Env):
         Actions must be radians, in the allowed range of the joints.
         Note that when training, the policy must normalize the outputs to the allowed range
         """
-        target_low = np.array([-2.2, -3.14158, 0, -2.0, -3.14158, -0.2])
-        target_high = np.array([2.2, 0.2, 3.14158, 1.8, 3.14158, 2.0])
-        # Set the target position
 
         current_joint_angles = self.data.qpos[self.arm_dof_id:self.arm_dof_id+self.nb_dof]
+        self.attempted_joint_pos = action + current_joint_angles
         target_arm_qpos = np.clip(
-            action + current_joint_angles,
-            target_low,
-            target_high,
+            self.attempted_joint_pos,
+            self.joint_limits['low'],
+            self.joint_limits['high'],
         )
 
         self.data.ctrl = target_arm_qpos
@@ -354,8 +357,8 @@ class PushCubeEnv(Env):
                     "high": np.array([0.03, 0.03, 0.0])
                 },
                 "target_pos_range": {
-                    "low": np.array([-0.05, -0.18, 0.005]),
-                    "high": np.array([0.05, -0.15, 0.005])
+                    "low": np.array([-0.05, -0.18, 0.01]),
+                    "high": np.array([0.05, -0.15, 0.01])
                 },
                 "required_height": 0.0,  # No lifting required
                 "placement_threshold": 0.08,  # Larger tolerance
@@ -377,8 +380,8 @@ class PushCubeEnv(Env):
                     "high": np.array([0.05, 0.05, 0.0])
                 },
                 "target_pos_range": {
-                    "low": np.array([-0.10, -0.20, 0.005]),
-                    "high": np.array([0.10, -0.13, 0.005])
+                    "low": np.array([-0.10, -0.20, 0.01]),
+                    "high": np.array([0.10, -0.13, 0.01])
                 },
                 "required_height": 0.02,  # Slight lifting
                 "placement_threshold": 0.06,
@@ -400,8 +403,8 @@ class PushCubeEnv(Env):
                     "high": np.array([0.07, 0.07, 0.0])
                 },
                 "target_pos_range": {
-                    "low": np.array([-0.12, -0.22, 0.005]),
-                    "high": np.array([0.12, -0.11, 0.005])
+                    "low": np.array([-0.12, -0.22, 0.01]),
+                    "high": np.array([0.12, -0.11, 0.01])
                 },
                 "required_height": 0.05,  # Significant lifting
                 "placement_threshold": 0.05,
@@ -423,8 +426,8 @@ class PushCubeEnv(Env):
                     "high": np.array([0.09, 0.09, 0.0])
                 },
                 "target_pos_range": {
-                    "low": np.array([-0.15, -0.25, 0.005]),
-                    "high": np.array([0.15, -0.1, 0.005])
+                    "low": np.array([-0.15, -0.25, 0.01]),
+                    "high": np.array([0.15, -0.1, 0.01])
                 },
                 "required_height": 0.08,
                 "placement_threshold": 0.04,
@@ -446,8 +449,8 @@ class PushCubeEnv(Env):
                     "high": np.array([0.14, 0.14, 0.0])
                 },
                 "target_pos_range": {
-                    "low": np.array([-0.2, -0.3, 0.005]),
-                    "high": np.array([0.2, -0.1, 0.005])
+                    "low": np.array([-0.2, -0.3, 0.01]),
+                    "high": np.array([0.2, -0.1, 0.01])
                 },
                 "required_height": 0.1,
                 "placement_threshold": 0.03,
@@ -469,8 +472,8 @@ class PushCubeEnv(Env):
                     "high": np.array([0.16, 0.16, 0.0])
                 },
                 "target_pos_range": {
-                    "low": np.array([-0.25, -0.35, 0.005]),
-                    "high": np.array([0.25, -0.1, 0.005])
+                    "low": np.array([-0.25, -0.35, 0.01]),
+                    "high": np.array([0.25, -0.1, 0.01])
                 },
                 "required_height": 0.12,
                 "placement_threshold": 0.02,
@@ -547,6 +550,16 @@ class PushCubeEnv(Env):
         reward -= 0.001 * mag_total_force
         
         reward -= 0.001 * np.sum(np.abs(action))
+
+        # Add joint limit penalty based on attempted position
+        # Calculate how much the attempted position would have exceeded limits
+        lower_violation = np.maximum(0, self.joint_limits['low'] - self.attempted_joint_pos)
+        upper_violation = np.maximum(0, self.attempted_joint_pos - self.joint_limits['high'])
+        total_violation = lower_violation + upper_violation
+        
+        # Apply quadratic penalty for attempted joint limit violations
+        joint_limit_penalty = 2.0 * np.sum(total_violation ** 2)
+        reward -= joint_limit_penalty
 
         return reward
 
