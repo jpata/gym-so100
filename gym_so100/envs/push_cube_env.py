@@ -357,8 +357,8 @@ class PushCubeEnv(Env):
                     "high": np.array([0.03, 0.03, 0.0])
                 },
                 "target_pos_range": {
-                    "low": np.array([-0.05, -0.18, 0.01]),
-                    "high": np.array([0.05, -0.15, 0.01])
+                    "low": np.array([-0.05, -0.22, 0.01]),
+                    "high": np.array([0.05, -0.18, 0.01])
                 },
                 "required_height": 0.0,  # No lifting required
                 "placement_threshold": 0.08,  # Larger tolerance
